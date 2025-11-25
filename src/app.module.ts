@@ -19,17 +19,37 @@ import { SeedService } from './seed/seed.service';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get<string>('DATABASE_HOST'),
-        port: configService.get<number>('DATABASE_PORT'),
-        username: configService.get<string>('DATABASE_USER'),
-        password: configService.get<string>('DATABASE_PASSWORD'),
-        database: configService.get<string>('DATABASE_NAME'),
-        autoLoadEntities: true,
-        synchronize: true,
-        logging: configService.get<string>('NODE_ENV') !== 'production',
-      }),
+      useFactory: (configService: ConfigService) => {
+        const nodeEnv = configService.get<string>('NODE_ENV') ?? 'development';
+        const databaseUrl = configService.get<string>('DATABASE_URL');
+        const sslEnabled = configService.get<string>('DATABASE_SSL', 'false') === 'true';
+        const sslConfig = sslEnabled ? { rejectUnauthorized: false } : undefined;
+
+        const baseOptions = {
+          type: 'postgres' as const,
+          autoLoadEntities: true,
+          synchronize: true,
+          logging: nodeEnv !== 'production',
+        };
+
+        if (databaseUrl) {
+          return {
+            ...baseOptions,
+            url: databaseUrl,
+            ssl: sslConfig,
+          };
+        }
+
+        return {
+          ...baseOptions,
+          host: configService.get<string>('DATABASE_HOST'),
+          port: configService.get<number>('DATABASE_PORT'),
+          username: configService.get<string>('DATABASE_USER'),
+          password: configService.get<string>('DATABASE_PASSWORD'),
+          database: configService.get<string>('DATABASE_NAME'),
+          ssl: sslConfig,
+        };
+      },
     }),
     UsersModule,
     AuthModule,
