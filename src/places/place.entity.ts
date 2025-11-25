@@ -15,6 +15,26 @@ export enum PlaceStatus {
   REJECTED = 'rejected',
 }
 
+export interface PlaceMenuItem {
+  name: string;
+  price?: string;
+  description?: string;
+}
+
+export interface PlaceMetadata {
+  gallery?: string[];
+  amenities?: string[];
+  highlights?: string[];
+  contact?: {
+    phone?: string;
+    website?: string;
+    address?: string;
+  };
+  hours?: Record<string, string>;
+  menu?: PlaceMenuItem[];
+  similarPlaces?: { name: string; rating?: number; icon?: string }[];
+}
+
 @Entity({ name: 'places' })
 export class Place {
   @PrimaryGeneratedColumn('uuid')
@@ -40,6 +60,12 @@ export class Place {
 
   @Column({ length: 10 })
   priceLevel: string;
+
+  @Column({ nullable: true })
+  priceRangeMin?: number;
+
+  @Column({ nullable: true })
+  priceRangeMax?: number;
 
   @Column({ nullable: true })
   imageUrl?: string;
@@ -69,7 +95,7 @@ export class Place {
   ownerEmail?: string;
 
   @Column({ type: 'jsonb', nullable: true })
-  metadata?: Record<string, any>;
+  metadata?: PlaceMetadata;
 
   @Column({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
   submittedAt: Date;

@@ -128,6 +128,36 @@ export class SeedService {
         status: PlaceStatus.APPROVED,
         ownerName: 'John Adebayo',
         ownerEmail: 'john@mamaafrica.ng',
+        metadata: {
+          gallery: [
+            'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=1200&q=80',
+            'https://images.unsplash.com/photo-1466978913421-dad2ebd01d17?auto=format&fit=crop&w=1200&q=80',
+            'https://images.unsplash.com/photo-1529042410759-befb1204b468?auto=format&fit=crop&w=1200&q=80',
+            'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1200&q=80',
+          ],
+          amenities: ['Free WiFi', 'Parking', 'Card Payment', 'Outdoor Seating', 'Live Music', 'COVID Safe'],
+          highlights: ['Nigerian', 'Traditional', 'Family-friendly', 'Live Music', 'Authentic', 'Local Favorite'],
+          contact: {
+            phone: '+234 123 456 7890',
+            website: 'https://www.mamaafrica.ng',
+            address: '123 Ahmadu Bello Way, Victoria Island, Lagos',
+          },
+          hours: {
+            Monday: '11:00 AM - 10:00 PM',
+            Tuesday: '11:00 AM - 10:00 PM',
+            Wednesday: '11:00 AM - 10:00 PM',
+            Thursday: '11:00 AM - 10:00 PM',
+            Friday: '11:00 AM - 11:00 PM',
+            Saturday: '10:00 AM - 11:00 PM',
+            Sunday: '12:00 PM - 9:00 PM',
+          },
+          menu: [
+            { name: 'Jollof Rice', price: '₦2,500', description: 'Traditional Nigerian rice dish with spices' },
+            { name: 'Pepper Soup', price: '₦3,000', description: 'Spicy Nigerian soup with fish or meat' },
+            { name: 'Suya', price: '₦1,500', description: 'Grilled spiced meat skewers' },
+            { name: 'Pounded Yam', price: '₦2,000', description: 'Traditional yam dish with soup' },
+          ],
+        },
       },
       {
         name: 'The Rooftop Lounge',

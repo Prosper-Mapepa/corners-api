@@ -3,6 +3,12 @@ dist
 .git
 .github
 npm-debug.log
+.DS_Store
+node_modules
+dist
+.git
+.github
+npm-debug.log
 Dockerfile
 README.md
 .DS_Store

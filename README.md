@@ -1,5 +1,62 @@
 ## African Corners API
 
+NestJS + TypeORM backend for the Corners platform.
+
+### Prerequisites
+- Node.js 20+
+- PostgreSQL 14+
+- npm
+
+### Environment Variables
+Create `.env` from `env.example`.
+
+| Variable | Notes |
+| --- | --- |
+| `NODE_ENV` | `development` locally, `production` on Railway |
+| `PORT` | HTTP port (`4000` default, Railway sets automatically) |
+| `FRONTEND_URL` | Comma-separated list of allowed origins |
+| `DATABASE_URL` | Optional Postgres connection string (Railway provides) |
+| `DATABASE_HOST/PORT/USER/PASSWORD/NAME` | Used when `DATABASE_URL` is empty |
+| `DATABASE_SSL` | Set `true` for managed Postgres that requires SSL |
+| `JWT_SECRET` | Secret for signing JWTs |
+
+### Local Development
+```bash
+cp env.example .env
+npm install
+npm run start:dev
+```
+
+### Seed Data
+Seeding runs on startup via `SeedService`. To force it manually:
+```bash
+npm run seed
+```
+
+### Docker (Railway build)
+```bash
+docker build -t corners-api .
+docker run --env-file .env -p 4000:4000 corners-api
+```
+
+### Deploy to Railway
+1. Push this repo to GitHub.
+2. In Railway, create a project → **Deploy from GitHub** → select this repo.
+3. Add a PostgreSQL add-on; Railway injects `DATABASE_URL`.
+4. Set variables (`NODE_ENV=production`, `FRONTEND_URL`, `JWT_SECRET`, etc.).
+5. Build command: `npm install && npm run build`
+6. Start command: `npm run start`
+
+### Railway CLI (optional)
+```bash
+npm i -g @railway/cli
+railway login
+railway link
+railway variables set JWT_SECRET=your-secret
+railway up
+```
+## African Corners API
+
 NestJS + TypeORM backend that powers the African Corners platform.
 
 ### Prerequisites

@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -43,6 +44,16 @@ export class CreatePlaceDto {
   priceLevel: string;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  priceRangeMin?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  priceRangeMax?: number;
+
+  @IsOptional()
   @IsString()
   imageUrl?: string;
 
@@ -78,5 +89,9 @@ export class CreatePlaceDto {
   @IsOptional()
   @IsEmail()
   ownerEmail?: string;
+
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, any>;
 }
 

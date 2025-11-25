@@ -1,11 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Place, PlaceStatus } from './place.entity';
+import { Place, PlaceMetadata, PlaceStatus } from './place.entity';
 import { CreatePlaceDto } from './dto/create-place.dto';
 import { UpdatePlaceDto } from './dto/update-place.dto';
 import { Category } from '../categories/category.entity';
 import { Location } from '../locations/location.entity';
+import { UserRole } from '../users/user.entity';
 
 export interface FindPlacesFilters {
   status?: PlaceStatus;
@@ -14,6 +15,17 @@ export interface FindPlacesFilters {
   search?: string;
   featured?: boolean;
   limit?: number;
+  ownerEmail?: string;
+}
+
+interface CreatePlaceOptions {
+  requestedByRole?: UserRole;
+  fallbackOwnerEmail?: string;
+}
+
+interface ManagePlaceOptions {
+  requestedByRole?: UserRole;
+  requesterEmail?: string;
 }
 
 @Injectable()
@@ -27,7 +39,8 @@ export class PlacesService {
     private readonly locationsRepository: Repository<Location>,
   ) {}
 
-  async create(createPlaceDto: CreatePlaceDto): Promise<Place> {
+  async create(createPlaceDto: CreatePlaceDto, options: CreatePlaceOptions = {}): Promise<Place> {
+    const { requestedByRole = UserRole.ADMIN, fallbackOwnerEmail } = options;
     const category = await this.categoriesRepository.findOne({ where: { id: createPlaceDto.categoryId } });
     if (!category) {
       throw new NotFoundException('Category not found');
@@ -45,15 +58,18 @@ export class PlacesService {
       rating: createPlaceDto.rating ?? 0,
       reviews: createPlaceDto.reviews ?? 0,
       priceLevel: createPlaceDto.priceLevel,
+      priceRangeMin: createPlaceDto.priceRangeMin,
+      priceRangeMax: createPlaceDto.priceRangeMax,
       imageUrl: createPlaceDto.imageUrl,
       isOpen: createPlaceDto.isOpen ?? true,
       tags: createPlaceDto.tags ?? [],
       distance: createPlaceDto.distance,
-      verified: createPlaceDto.verified ?? false,
-      featured: createPlaceDto.featured ?? false,
-      status: createPlaceDto.status ?? PlaceStatus.PENDING,
+      verified: requestedByRole === UserRole.BUSINESS ? false : createPlaceDto.verified ?? false,
+      featured: requestedByRole === UserRole.BUSINESS ? false : createPlaceDto.featured ?? false,
+      status: requestedByRole === UserRole.BUSINESS ? PlaceStatus.PENDING : createPlaceDto.status ?? PlaceStatus.PENDING,
       ownerName: createPlaceDto.ownerName,
-      ownerEmail: createPlaceDto.ownerEmail,
+      ownerEmail: this.normalizeEmail(createPlaceDto.ownerEmail ?? fallbackOwnerEmail) ?? undefined,
+      metadata: this.normalizeMetadata(createPlaceDto.metadata),
     });
     return this.placesRepository.save(place);
   }
@@ -75,6 +91,11 @@ export class PlacesService {
     }
     if (filters.featured !== undefined) {
       qb.andWhere('place.featured = :featured', { featured: filters.featured });
+    }
+    if (filters.ownerEmail) {
+      qb.andWhere('LOWER(place.ownerEmail) = LOWER(:ownerEmail)', {
+        ownerEmail: this.normalizeEmail(filters.ownerEmail),
+      });
     }
     if (filters.search) {
       qb.andWhere(
@@ -102,7 +123,7 @@ export class PlacesService {
     return place;
   }
 
-  async update(id: string, updatePlaceDto: UpdatePlaceDto): Promise<Place> {
+  async update(id: string, updatePlaceDto: UpdatePlaceDto, options: ManagePlaceOptions = {}): Promise<Place> {
     const place = await this.placesRepository.findOne({
       where: { id },
       relations: ['category', 'location'],
@@ -111,68 +132,92 @@ export class PlacesService {
       throw new NotFoundException('Place not found');
     }
 
-    if (updatePlaceDto.categoryId && updatePlaceDto.categoryId !== place.category.id) {
-      const category = await this.categoriesRepository.findOne({ where: { id: updatePlaceDto.categoryId } });
+    const { requestedByRole = UserRole.ADMIN, requesterEmail } = options;
+    const effectiveDto =
+      requestedByRole === UserRole.BUSINESS ? this.sanitizeBusinessUpdate(updatePlaceDto) : updatePlaceDto;
+
+    if (requestedByRole === UserRole.BUSINESS) {
+      this.ensureBusinessOwnership(place, requesterEmail);
+    }
+
+    if (effectiveDto.categoryId && effectiveDto.categoryId !== place.category.id) {
+      const category = await this.categoriesRepository.findOne({ where: { id: effectiveDto.categoryId } });
       if (!category) {
         throw new NotFoundException('Category not found');
       }
       place.category = category;
     }
-    if (updatePlaceDto.locationId && updatePlaceDto.locationId !== place.location.id) {
-      const location = await this.locationsRepository.findOne({ where: { id: updatePlaceDto.locationId } });
+    if (effectiveDto.locationId && effectiveDto.locationId !== place.location.id) {
+      const location = await this.locationsRepository.findOne({ where: { id: effectiveDto.locationId } });
       if (!location) {
         throw new NotFoundException('Location not found');
       }
       place.location = location;
     }
 
-    if (updatePlaceDto.name !== undefined) {
-      place.name = updatePlaceDto.name;
+    if (effectiveDto.name !== undefined) {
+      place.name = effectiveDto.name;
     }
-    if (updatePlaceDto.description !== undefined) {
-      place.description = updatePlaceDto.description;
+    if (effectiveDto.description !== undefined) {
+      place.description = effectiveDto.description;
     }
-    if (updatePlaceDto.rating !== undefined) {
-      place.rating = updatePlaceDto.rating;
+    if (effectiveDto.rating !== undefined) {
+      place.rating = effectiveDto.rating;
     }
-    if (updatePlaceDto.reviews !== undefined) {
-      place.reviews = updatePlaceDto.reviews;
+    if (effectiveDto.reviews !== undefined) {
+      place.reviews = effectiveDto.reviews;
     }
-    if (updatePlaceDto.priceLevel !== undefined) {
-      place.priceLevel = updatePlaceDto.priceLevel;
+    if (effectiveDto.priceLevel !== undefined) {
+      place.priceLevel = effectiveDto.priceLevel;
     }
-    if (updatePlaceDto.imageUrl !== undefined) {
-      place.imageUrl = updatePlaceDto.imageUrl;
+    if (effectiveDto.priceRangeMin !== undefined) {
+      place.priceRangeMin = effectiveDto.priceRangeMin;
     }
-    if (updatePlaceDto.isOpen !== undefined) {
-      place.isOpen = updatePlaceDto.isOpen;
+    if (effectiveDto.priceRangeMax !== undefined) {
+      place.priceRangeMax = effectiveDto.priceRangeMax;
     }
-    if (updatePlaceDto.tags !== undefined) {
-      place.tags = updatePlaceDto.tags;
+    if (effectiveDto.imageUrl !== undefined) {
+      place.imageUrl = effectiveDto.imageUrl;
     }
-    if (updatePlaceDto.distance !== undefined) {
-      place.distance = updatePlaceDto.distance;
+    if (effectiveDto.isOpen !== undefined) {
+      place.isOpen = effectiveDto.isOpen;
     }
-    if (updatePlaceDto.verified !== undefined) {
-      place.verified = updatePlaceDto.verified;
+    if (effectiveDto.tags !== undefined) {
+      place.tags = effectiveDto.tags;
     }
-    if (updatePlaceDto.featured !== undefined) {
-      place.featured = updatePlaceDto.featured;
+    if (effectiveDto.distance !== undefined) {
+      place.distance = effectiveDto.distance;
     }
-    if (updatePlaceDto.status !== undefined) {
-      place.status = updatePlaceDto.status;
+    if (effectiveDto.verified !== undefined) {
+      place.verified = effectiveDto.verified;
     }
-    if (updatePlaceDto.ownerName !== undefined) {
-      place.ownerName = updatePlaceDto.ownerName;
+    if (effectiveDto.featured !== undefined) {
+      place.featured = effectiveDto.featured;
     }
-    if (updatePlaceDto.ownerEmail !== undefined) {
-      place.ownerEmail = updatePlaceDto.ownerEmail;
+    if (effectiveDto.status !== undefined) {
+      place.status = effectiveDto.status;
+    }
+    if (effectiveDto.ownerName !== undefined) {
+      place.ownerName = effectiveDto.ownerName;
+    }
+    if (effectiveDto.ownerEmail !== undefined) {
+      place.ownerEmail = this.normalizeEmail(effectiveDto.ownerEmail) ?? undefined;
+    }
+    if (effectiveDto.metadata !== undefined) {
+      place.metadata = this.normalizeMetadata(effectiveDto.metadata);
     }
 
     return this.placesRepository.save(place);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, options: ManagePlaceOptions = {}): Promise<void> {
+    const place = await this.placesRepository.findOne({ where: { id } });
+    if (!place) {
+      throw new NotFoundException('Place not found');
+    }
+    if (options.requestedByRole === UserRole.BUSINESS) {
+      this.ensureBusinessOwnership(place, options.requesterEmail);
+    }
     const result = await this.placesRepository.delete(id);
     if (result.affected === 0) {
       throw new NotFoundException('Place not found');
@@ -201,6 +246,82 @@ export class PlacesService {
       rejected,
       featured,
       recentSubmissions,
+    };
+  }
+
+  private sanitizeBusinessUpdate(updatePlaceDto: UpdatePlaceDto): UpdatePlaceDto {
+    const { status, verified, featured, ownerEmail, rating, reviews, ...allowed } = updatePlaceDto;
+    return allowed;
+  }
+
+  private ensureBusinessOwnership(place: Place, requesterEmail?: string | null) {
+    if (!requesterEmail) {
+      throw new ForbiddenException('Missing account information for this action');
+    }
+    if (this.normalizeEmail(place.ownerEmail) !== this.normalizeEmail(requesterEmail)) {
+      throw new ForbiddenException('You can only manage listings that belong to you');
+    }
+  }
+
+  private normalizeEmail(email?: string | null) {
+    return email?.trim().toLowerCase() ?? null;
+  }
+
+  private normalizeMetadata(metadata?: Record<string, any> | null): PlaceMetadata | undefined {
+    if (!metadata || typeof metadata !== 'object') {
+      return undefined;
+    }
+    const gallery = Array.isArray(metadata.gallery)
+      ? metadata.gallery.filter((value) => typeof value === 'string' && value.trim().length > 0)
+      : undefined;
+    const amenities = Array.isArray(metadata.amenities)
+      ? metadata.amenities.filter((value: unknown) => typeof value === 'string' && value.trim().length > 0)
+      : undefined;
+    const highlights = Array.isArray(metadata.highlights)
+      ? metadata.highlights.filter((value: unknown) => typeof value === 'string' && value.trim().length > 0)
+      : undefined;
+    const hours =
+      metadata.hours && typeof metadata.hours === 'object'
+        ? Object.fromEntries(
+            Object.entries(metadata.hours as Record<string, string>)
+              .filter(([key, value]) => key && typeof value === 'string' && value.trim().length > 0)
+              .map(([key, value]) => [key, value.trim()]),
+          )
+        : undefined;
+    const menu = Array.isArray(metadata.menu)
+      ? metadata.menu
+          .map((item: any) => ({
+            name: typeof item?.name === 'string' ? item.name : undefined,
+            price: typeof item?.price === 'string' ? item.price : undefined,
+            description: typeof item?.description === 'string' ? item.description : undefined,
+          }))
+          .filter((item) => item.name)
+      : undefined;
+    const similarPlaces = Array.isArray(metadata.similarPlaces)
+      ? metadata.similarPlaces
+          .map((item: any) => ({
+            name: typeof item?.name === 'string' ? item.name : undefined,
+            rating: typeof item?.rating === 'number' ? item.rating : undefined,
+            icon: typeof item?.icon === 'string' ? item.icon : undefined,
+          }))
+          .filter((item) => item.name)
+      : undefined;
+
+    return {
+      gallery,
+      amenities,
+      highlights,
+      contact:
+        metadata.contact && typeof metadata.contact === 'object'
+          ? {
+              phone: typeof metadata.contact.phone === 'string' ? metadata.contact.phone : undefined,
+              website: typeof metadata.contact.website === 'string' ? metadata.contact.website : undefined,
+              address: typeof metadata.contact.address === 'string' ? metadata.contact.address : undefined,
+            }
+          : undefined,
+      hours,
+      menu,
+      similarPlaces,
     };
   }
 }

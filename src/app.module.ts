@@ -8,6 +8,9 @@ import { AuthModule } from './auth/auth.module';
 import { PlacesModule } from './places/places.module';
 import { CategoriesModule } from './categories/categories.module';
 import { LocationsModule } from './locations/locations.module';
+import { ReviewsModule } from './reviews/reviews.module';
+import { MessagesModule } from './messages/messages.module';
+import { ReservationsModule } from './reservations/reservations.module';
 import { SeedModule } from './seed/seed.module';
 import { SeedService } from './seed/seed.service';
 
@@ -56,6 +59,9 @@ import { SeedService } from './seed/seed.service';
     CategoriesModule,
     LocationsModule,
     PlacesModule,
+    ReviewsModule,
+    MessagesModule,
+    ReservationsModule,
     SeedModule,
   ],
   controllers: [AppController],
